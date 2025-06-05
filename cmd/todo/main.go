@@ -1,11 +1,11 @@
 package main
 
 import (
-	"database/sql"
-	"log"
-	"net/http"
+        "database/sql"
+        "log"
 
-	_ "github.com/mattn/go-sqlite3"
+        _ "github.com/mattn/go-sqlite3"
+        "github.com/gin-gonic/gin"
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/sqlitedialect"
 	"github.com/uptrace/bun/driver/sqliteshim"
@@ -33,13 +33,13 @@ func main() {
 
 	repo := sqlite.NewTodoRepository(db)
 	svc := service.NewTodoService(repo)
-	handler := httpapi.NewHandler(svc)
+        handler := httpapi.NewHandler(svc)
 
-	mux := http.NewServeMux()
-	handler.Register(mux)
+        router := gin.Default()
+        handler.Register(router)
 
-	log.Println("listening on :8080")
-	if err := http.ListenAndServe(":8080", mux); err != nil {
-		log.Fatal(err)
-	}
+        log.Println("listening on :8080")
+        if err := router.Run(":8080"); err != nil {
+                log.Fatal(err)
+        }
 }
