@@ -1,12 +1,13 @@
 package http
 
 import (
-	"encoding/json"
-	"net/http"
-	"strconv"
+        "net/http"
+        "strconv"
 
-	"github.com/example/todo/internal/domain"
-	"github.com/example/todo/internal/service"
+        "github.com/gin-gonic/gin"
+
+        "github.com/example/todo/internal/domain"
+        "github.com/example/todo/internal/service"
 )
 
 // Handler exposes HTTP routes for todo service.
@@ -19,75 +20,78 @@ func NewHandler(s *service.TodoService) *Handler {
 	return &Handler{Service: s}
 }
 
-func (h *Handler) Register(mux *http.ServeMux) {
-	mux.HandleFunc("/todos", h.handleTodos)
-	mux.HandleFunc("/todos/", h.handleTodo)
+func (h *Handler) Register(r *gin.Engine) {
+        r.GET("/todos", h.listTodos)
+        r.POST("/todos", h.createTodo)
+        r.GET("/todos/:id", h.getTodo)
+        r.PUT("/todos/:id", h.updateTodo)
+        r.DELETE("/todos/:id", h.deleteTodo)
 }
 
-func (h *Handler) handleTodos(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case http.MethodGet:
-		todos, err := h.Service.List()
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		respondJSON(w, todos)
-	case http.MethodPost:
-		var todo domain.Todo
-		if err := json.NewDecoder(r.Body).Decode(&todo); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		if err := h.Service.Create(&todo); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		respondJSON(w, todo)
-	default:
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-	}
+func (h *Handler) listTodos(c *gin.Context) {
+        todos, err := h.Service.List()
+        if err != nil {
+                c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+                return
+        }
+        c.JSON(http.StatusOK, todos)
 }
 
-func (h *Handler) handleTodo(w http.ResponseWriter, r *http.Request) {
-	idStr := r.URL.Path[len("/todos/"):]
-	id, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil {
-		http.Error(w, "invalid id", http.StatusBadRequest)
-		return
-	}
-	switch r.Method {
-	case http.MethodGet:
-		todo, err := h.Service.Get(id)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		respondJSON(w, todo)
-	case http.MethodPut:
-		var todo domain.Todo
-		if err := json.NewDecoder(r.Body).Decode(&todo); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		todo.ID = id
-		if err := h.Service.Update(&todo); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		respondJSON(w, todo)
-	case http.MethodDelete:
-		if err := h.Service.Delete(id); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		w.WriteHeader(http.StatusNoContent)
-	default:
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-	}
+func (h *Handler) createTodo(c *gin.Context) {
+        var todo domain.Todo
+        if err := c.ShouldBindJSON(&todo); err != nil {
+                c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+                return
+        }
+        if err := h.Service.Create(&todo); err != nil {
+                c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+                return
+        }
+        c.JSON(http.StatusOK, todo)
 }
 
-func respondJSON(w http.ResponseWriter, v interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(v)
+func (h *Handler) getTodo(c *gin.Context) {
+        id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+        if err != nil {
+                c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+                return
+        }
+        todo, err := h.Service.Get(id)
+        if err != nil {
+                c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+                return
+        }
+        c.JSON(http.StatusOK, todo)
+}
+
+func (h *Handler) updateTodo(c *gin.Context) {
+        id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+        if err != nil {
+                c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+                return
+        }
+        var todo domain.Todo
+        if err := c.ShouldBindJSON(&todo); err != nil {
+                c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+                return
+        }
+        todo.ID = id
+        if err := h.Service.Update(&todo); err != nil {
+                c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+                return
+        }
+        c.JSON(http.StatusOK, todo)
+}
+
+func (h *Handler) deleteTodo(c *gin.Context) {
+        id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+        if err != nil {
+                c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+                return
+        }
+        if err := h.Service.Delete(id); err != nil {
+                c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+                return
+        }
+        c.Status(http.StatusNoContent)
 }
